@@ -6,6 +6,16 @@
 
   <PropertyGroup>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <Description>This package contains an encryption algorithm that helps to process X509 certificates based on the SEED encryption algorithm used in the Korean e-commerce environment.</Description>
+    <Copyright>The original code was written by thermidor.</Copyright>
+    <PackageProjectUrl>https://github.com/yourtablecloth/PnPeople.Security</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/yourtablecloth/PnPeople.Security</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>SEED,X509,PnPeople,thermidor</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <EnableNETAnalyzers>False</EnableNETAnalyzers>
+    <EnforceCodeStyleInBuild>False</EnforceCodeStyleInBuild>
     <!-- <DefineConstants>INSIDE_CORLIB</DefineConstants> -->
   </PropertyGroup>
 
