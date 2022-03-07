@@ -69,7 +69,7 @@ namespace PnPeople.Security.Test
 
                     Console.Write("- Type private key password: ");
 
-                    nPKCS12 p12 = new nPKCS12();
+                    CustomPKCS12 p12 = new CustomPKCS12();
                     var passwd = ReadPasswordFromConsole();
                     byte[] decrypted = p12.Decrypt(encInfo.Algorithm, encInfo.Salt, encInfo.IterationCount, encInfo.EncryptedData, passwd);
 
@@ -86,10 +86,22 @@ namespace PnPeople.Security.Test
 
                         Console.WriteLine($"- Signature Validation Result: {(result ? "Valid" : "Invalid")}");
 
-                        /*
-                        if (token != null)
+                        if (result && token != null)
                         {
-                            var pfxData = token.Export(X509ContentType.Pfx, passwd);
+                            var builder = new Mono.Security.X509.X509CertificateBuilder(3)
+                            {
+                                SerialNumber = token.GetSerialNumber(),
+                                IssuerName = token.IssuerName.Name,
+                                NotBefore = token.NotBefore,
+                                NotAfter = token.NotAfter,
+                                SubjectName = token.SubjectName.Name,
+                                SubjectPublicKey = token.GetRSAPublicKey(),
+                                Hash = "sha256",
+                            };
+
+                            var pfxData =
+                                builder.Sign(provider);
+                                //token.Export(X509ContentType.Pfx, passwd);
                             var directoryPath = Path.GetDirectoryName(certFile);
                             var pfxPath = Path.Combine(directoryPath, "signCert.pfx");
                             File.WriteAllBytes(pfxPath, pfxData);
@@ -97,7 +109,6 @@ namespace PnPeople.Security.Test
                             if (File.Exists(pfxPath))
                                 Console.WriteLine($"- PFX Converted: {pfxPath}");
                         }
-                        */
                     }
                     else
                     {

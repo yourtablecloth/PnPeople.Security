@@ -9,11 +9,11 @@ using System.Text;
 
 namespace PnPeople.Security
 {
-    public class nPKCS12
+    public class CustomPKCS12
     {
         public const string pbeWithSHAAndSEEDCBC = "1.2.410.200004.1.15";
 
-        public nPKCS12()
+        public CustomPKCS12()
         {
         }
 

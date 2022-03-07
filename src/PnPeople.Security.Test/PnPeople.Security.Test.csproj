@@ -6,6 +6,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="BouncyCastle.NetCoreSdk" Version="1.9.3.1" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\PnPeople.Security\PnPeople.Security.csproj" />
   </ItemGroup>
 
