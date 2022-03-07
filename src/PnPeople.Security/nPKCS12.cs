@@ -1,5 +1,7 @@
 using Mono.Security.X509;
 using System;
+using System.Runtime.InteropServices;
+using System.Security;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -10,76 +12,54 @@ namespace PnPeople.Security
     public class nPKCS12
     {
         public const string pbeWithSHAAndSEEDCBC = "1.2.410.200004.1.15";
-        private byte[] _password;
+
         public nPKCS12()
         {
         }
-        /// <summary>
-        /// SEED/CBC에서 Password는 입력 문자열을 그대로 사용한다
-        /// </summary>
-        public string Password
+
+        // https://stackoverflow.com/questions/818704/how-to-convert-securestring-to-system-string
+        private char[] ConvertToCharArray(SecureString value)
         {
-            set
+            var valuePtr = IntPtr.Zero;
+
+            try
             {
-                if (!string.IsNullOrEmpty(value))
+                valuePtr = Marshal.SecureStringToGlobalAllocUnicode(value);
+                var recoveredArray = new char[value.Length];
+
+                for (int i = 0; i < value.Length; i++)
                 {
-                    int size = value.Length;
-                    if (size > PKCS12.MaximumPasswordLength) size = PKCS12.MaximumPasswordLength;
-                    _password = new byte[size];
-                    Encoding.Default.GetBytes(value, 0, size, _password, 0);
+                    short unicodeChar = Marshal.ReadInt16(valuePtr, i * 2);
+                    recoveredArray[i] = (char)unicodeChar;
                 }
-                else
-                {
-                    // no password
-                    _password = null;
-                }
+
+                return recoveredArray;
+            }
+            finally
+            {
+                Marshal.ZeroFreeGlobalAllocUnicode(valuePtr);
             }
         }
-        // Key, IV를 각각 64바이트로 만들어서 합친다.... 이상한 로직: 사용하면 안될 듯
-        private SEED GetSymmetricAlgorithm(string algorithmOid, byte[] salt, int iterationCount)
+
+        private SEED GetSymmetricAlgorithm(byte[] salt, int iterationCount, byte[] password)
         {
-            int keyLength = 16; // 128 bits (default)
-            int ivLength = 16; // 128 bits (default)
-            PKCS12.DeriveBytes pd = new PKCS12.DeriveBytes();
-            pd.Password = this._password;
-            pd.Salt = salt;
-            pd.IterationCount = iterationCount;
-            switch (algorithmOid)
-            {
-                case pbeWithSHAAndSEEDCBC: // no unit test available
-                    pd.HashName = "SHA";
-                    break;
-            }
-            SEED seed = new SEED();
-            seed.KeyBytes = pd.DeriveKey(keyLength);
-            // IV required only for block ciphers (not stream ciphers)
-            if (ivLength > 0)
-            {
-                seed.IV = pd.DeriveIV(ivLength);
-                seed.ModType = SEED.MODE.AI_CBC; // CBC
-            }
-            return seed;
-        }
-        private SEED GetSymmetricAlgorithm(byte[] salt, int iterationCount)
-        {
-            // Rfc2898DeriveBytes 사용: 에러남
-            //Rfc2898DeriveBytes pdb = new Rfc2898DeriveBytes(_password, salt, iterationCount); // PBKDF2
-            //byte[] derivedKey = pdb.GetBytes(20);
-            PasswordDeriveBytes pdb = new PasswordDeriveBytes(_password, salt, "SHA1", iterationCount); // PBKDF1
+            PasswordDeriveBytes pdb = new PasswordDeriveBytes(password, salt, "SHA1", iterationCount); // PBKDF1
             byte[] derivedKey = pdb.GetBytes(20);
             SEED seed = new SEED();
-            seed.KeyBytes = getKey(derivedKey);
-            seed.IV = getIV(derivedKey);
+            seed.KeyBytes = GetKey(derivedKey);
+            seed.IV = GetInitVector(derivedKey);
             seed.ModType = SEED.MODE.AI_CBC; // CBC
             return seed;
         }
-        private byte[] getKey(byte[] derivedKey)
+
+        private byte[] GetKey(byte[] derivedKey)
         {
             byte[] key = new byte[16];
             Buffer.BlockCopy(derivedKey, 0, key, 0, 16);
             return key;
         }
-        private byte[] getIV(byte[] derivedKey)
+        
+        private byte[] GetInitVector(byte[] derivedKey)
         {
             byte[] iv = new byte[16];
             byte[] ivTemp = new byte[4];
@@ -89,28 +69,48 @@ namespace PnPeople.Security
             Buffer.BlockCopy(derivedIV, 0, iv, 0, 16);
             return iv;
         }
-        public byte[] Decrypt(string algorithmOid, byte[] salt, int iterationCount, byte[] encryptedData)
+
+        public byte[] Decrypt(string algorithmOid, byte[] salt, int iterationCount, byte[] encryptedData, SecureString protectedPassword)
         {
-            if (algorithmOid != pbeWithSHAAndSEEDCBC) return null; // Only for SHA1/SEED/CBC
-                                                                   // Mono DeriveBytes 사용: 에러남
-                                                                   //SEED seed1 = GetSymmetricAlgorithm(algorithmOid, salt, iterationCount);
-                                                                   //byte[] result1 = seed1.Decrypt(encryptedData);
-            SEED seed = GetSymmetricAlgorithm(salt, iterationCount);
+            // Only for SHA1/SEED/CBC
+            if (algorithmOid != pbeWithSHAAndSEEDCBC)
+                return null;
+
+            byte[] password = null;
+            var recoveredArray = ConvertToCharArray(protectedPassword);
+
+            if (recoveredArray.Length > 0)
+            {
+                int size = protectedPassword.Length;
+                if (size > PKCS12.MaximumPasswordLength)
+                    size = PKCS12.MaximumPasswordLength;
+                password = new byte[size];
+                Encoding.Default.GetBytes(recoveredArray, 0, size, password, 0);
+            }
+            
+            for (int i = 0; i < recoveredArray.Length; i++)
+                recoveredArray[i] = '\0';
+
+            SEED seed = GetSymmetricAlgorithm(salt, iterationCount, password);
             byte[] result = seed.Decrypt(encryptedData);
             if (result == null)
                 return null;
+
             // CFB 테스트
             seed.ModType = SEED.MODE.AI_CFB;
             byte[] enc = seed.Encrypt(result /*result2*/);
-            byte[] dec = seed.Decrypt(enc);
+            seed.Decrypt(enc);
+
             // ECB 테스트
             seed.ModType = SEED.MODE.AI_ECB;
             enc = seed.Encrypt(result /*result2*/);
-            dec = seed.Decrypt(enc);
+            seed.Decrypt(enc);
+
             // OFB 테스트
             seed.ModType = SEED.MODE.AI_OFB;
             enc = seed.Encrypt(result /*result2*/);
-            dec = seed.Decrypt(enc);
+            seed.Decrypt(enc);
+
             return result;
         }
     }

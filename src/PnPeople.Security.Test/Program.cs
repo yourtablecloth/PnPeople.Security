@@ -2,6 +2,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Security;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
@@ -26,10 +27,13 @@ namespace PnPeople.Security.Test
                     Console.WriteLine($"{Path.GetFileName(eachDirectory)}");
                     var certFile = Directory.GetFiles(eachDirectory, "*.der", SearchOption.TopDirectoryOnly).FirstOrDefault();
 
+                    X509Certificate cert = null;
+                    X509Certificate2 token = null;
+
                     if (certFile != null && File.Exists(certFile))
                     {
-                        X509Certificate cert = X509Certificate.CreateFromCertFile(certFile);
-                        X509Certificate2 token = new X509Certificate2(cert);
+                        cert = X509Certificate.CreateFromCertFile(certFile);
+                        token = new X509Certificate2(cert);
 
                         Console.WriteLine("- IssuerName: " + token.Issuer);
                         Console.WriteLine("- KeyAlgorithm: " + token.GetKeyAlgorithm());
@@ -37,6 +41,19 @@ namespace PnPeople.Security.Test
                         Console.WriteLine("- Name: " + token.Subject);
                         Console.WriteLine("- PublicKey: " + token.GetPublicKeyString());
                         Console.WriteLine("- SerialNumber: " + token.GetSerialNumberString());
+                        Console.WriteLine("- HasPrivateKey: " + token.HasPrivateKey);
+
+                        var currentDateTime = DateTime.Now;
+                        if (currentDateTime <= token.NotBefore)
+                        {
+                            Console.WriteLine("- Certificate is not valid yet.");
+                            continue;
+                        }
+                        else if (token.NotAfter <= currentDateTime)
+                        {
+                            Console.WriteLine("- Certificate has expiered.");
+                            continue;
+                        }
                     }
 
                     var keyFile = Directory.GetFiles(eachDirectory, "*.key", SearchOption.TopDirectoryOnly).FirstOrDefault();
@@ -53,8 +70,8 @@ namespace PnPeople.Security.Test
                     Console.Write("- Type private key password: ");
 
                     nPKCS12 p12 = new nPKCS12();
-                    p12.Password = ReadPasswordFromConsole(); // 실제 개인키 암호
-                    byte[] decrypted = p12.Decrypt(encInfo.Algorithm, encInfo.Salt, encInfo.IterationCount, encInfo.EncryptedData);
+                    var passwd = ReadPasswordFromConsole();
+                    byte[] decrypted = p12.Decrypt(encInfo.Algorithm, encInfo.Salt, encInfo.IterationCount, encInfo.EncryptedData, passwd);
 
                     if (decrypted != null)
                     {
@@ -68,6 +85,19 @@ namespace PnPeople.Security.Test
                         var result = provider.VerifyData(buffer, signed, HashAlgorithmName.SHA1, RSASignaturePadding.Pkcs1);
 
                         Console.WriteLine($"- Signature Validation Result: {(result ? "Valid" : "Invalid")}");
+
+                        /*
+                        if (token != null)
+                        {
+                            var pfxData = token.Export(X509ContentType.Pfx, passwd);
+                            var directoryPath = Path.GetDirectoryName(certFile);
+                            var pfxPath = Path.Combine(directoryPath, "signCert.pfx");
+                            File.WriteAllBytes(pfxPath, pfxData);
+
+                            if (File.Exists(pfxPath))
+                                Console.WriteLine($"- PFX Converted: {pfxPath}");
+                        }
+                        */
                     }
                     else
                     {
@@ -78,9 +108,9 @@ namespace PnPeople.Security.Test
         }
 
         // https://stackoverflow.com/questions/3404421/password-masking-console-application
-        private static string ReadPasswordFromConsole()
+        private static SecureString ReadPasswordFromConsole()
         {
-            var pass = string.Empty;
+            var pass = new SecureString();
 
             ConsoleKey key;
             do
@@ -91,12 +121,14 @@ namespace PnPeople.Security.Test
                 if (key == ConsoleKey.Backspace && pass.Length > 0)
                 {
                     Console.Write("\b \b");
-                    pass = pass[0..^1];
+                    pass.RemoveAt(pass.Length - 1);
+                    //pass = pass[0..^1];
                 }
                 else if (!char.IsControl(keyInfo.KeyChar))
                 {
                     Console.Write("*");
-                    pass += keyInfo.KeyChar;
+                    pass.AppendChar(keyInfo.KeyChar);
+                    //pass += keyInfo.KeyChar;
                 }
             } while (key != ConsoleKey.Enter);
 
