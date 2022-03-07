@@ -13,7 +13,7 @@ namespace PnPeople.Security.Test
     {
         private static void Main()
         {
-            string folder = Path.Combine(
+            var folder = Path.Combine(
                 Environment.GetEnvironmentVariable("USERPROFILE"),
                 "AppData", "LocalLow", "NPKI");
 
@@ -61,47 +61,35 @@ namespace PnPeople.Security.Test
                     if (keyFile == null || !File.Exists(keyFile))
                         continue;
 
-                    byte[] bytes = File.ReadAllBytes(keyFile);
+                    var bytes = File.ReadAllBytes(keyFile);
                     Console.WriteLine("- KeyType: " + PKCS8.GetType(bytes));
 
-                    PKCS8.EncryptedPrivateKeyInfo encInfo = new PKCS8.EncryptedPrivateKeyInfo(bytes);
+                    var encInfo = new PKCS8.EncryptedPrivateKeyInfo(bytes);
                     Console.WriteLine("- Algorithm: " + encInfo.Algorithm);
 
                     Console.Write("- Type private key password: ");
 
                     CustomPKCS12 p12 = new CustomPKCS12();
                     var passwd = ReadPasswordFromConsole();
-                    byte[] decrypted = p12.Decrypt(encInfo.Algorithm, encInfo.Salt, encInfo.IterationCount, encInfo.EncryptedData, passwd);
+                    var decrypted = p12.Decrypt(encInfo.Algorithm, encInfo.Salt, encInfo.IterationCount, encInfo.EncryptedData, passwd);
 
                     if (decrypted != null)
                     {
-                        PKCS8.PrivateKeyInfo keyInfo = new PKCS8.PrivateKeyInfo(decrypted);
-                        RSA provider = PKCS8.PrivateKeyInfo.DecodeRSA(keyInfo.PrivateKey);
+                        var keyInfo = new PKCS8.PrivateKeyInfo(decrypted);
+                        var provider = PKCS8.PrivateKeyInfo.DecodeRSA(keyInfo.PrivateKey);
 
                         // 개인키를 이용한 전자서명 테스트
                         var randomString = string.Concat(Enumerable.Range(1, (int)(Math.Abs(DateTime.Now.Ticks) % 9)).Select(x => Guid.NewGuid().ToString("n")));
-                        byte[] buffer = Encoding.Default.GetBytes(randomString);
-                        byte[] signed = provider.SignData(buffer, HashAlgorithmName.SHA1, RSASignaturePadding.Pkcs1);
+                        var buffer = Encoding.Default.GetBytes(randomString);
+                        var signed = provider.SignData(buffer, HashAlgorithmName.SHA1, RSASignaturePadding.Pkcs1);
                         var result = provider.VerifyData(buffer, signed, HashAlgorithmName.SHA1, RSASignaturePadding.Pkcs1);
 
                         Console.WriteLine($"- Signature Validation Result: {(result ? "Valid" : "Invalid")}");
 
                         if (result && token != null)
                         {
-                            var builder = new Mono.Security.X509.X509CertificateBuilder(3)
-                            {
-                                SerialNumber = token.GetSerialNumber(),
-                                IssuerName = token.IssuerName.Name,
-                                NotBefore = token.NotBefore,
-                                NotAfter = token.NotAfter,
-                                SubjectName = token.SubjectName.Name,
-                                SubjectPublicKey = token.GetRSAPublicKey(),
-                                Hash = "sha256",
-                            };
-
-                            var pfxData =
-                                builder.Sign(provider);
-                                //token.Export(X509ContentType.Pfx, passwd);
+                            var tokenWithPrivateKey = token.CopyWithPrivateKey(provider);
+                            var pfxData = tokenWithPrivateKey.Export(X509ContentType.Pfx, passwd);
                             var directoryPath = Path.GetDirectoryName(certFile);
                             var pfxPath = Path.Combine(directoryPath, "signCert.pfx");
                             File.WriteAllBytes(pfxPath, pfxData);
