@@ -1,4 +1,5 @@
 using Mono.Security.X509;
+using PnPeople.Security.Cryptography;
 using System;
 using System.Runtime.InteropServices;
 using System.Security;
@@ -9,11 +10,11 @@ using System.Text;
 
 namespace PnPeople.Security
 {
-    public class CustomPKCS12
+    public class SHASEEDDecryptor
     {
         public const string pbeWithSHAAndSEEDCBC = "1.2.410.200004.1.15";
 
-        public CustomPKCS12()
+        public SHASEEDDecryptor()
         {
         }
 
@@ -112,6 +113,19 @@ namespace PnPeople.Security
             seed.Decrypt(enc);
 
             return result;
+        }
+
+        [Obsolete("Please use SecureString version of this method.", false)]
+        public byte[] Decrypt(string algorithmOid, byte[] salt, int iterationCount, byte[] encryptedData, char[] unprotectedPassword)
+        {
+            if (unprotectedPassword == null)
+                return null;
+
+            var protectedPassword = new SecureString();
+            for (var i = 0; i < unprotectedPassword.Length; i++)
+                protectedPassword.AppendChar(unprotectedPassword[i]);
+
+            return Decrypt(algorithmOid, salt, iterationCount, encryptedData, protectedPassword);
         }
     }
 }

@@ -3,7 +3,7 @@ using System.Text;
 
 // https://thermidor.tistory.com/430
 
-namespace PnPeople.Security
+namespace PnPeople.Security.Cryptography
 {
     /// <summary>
     /// SEED에 대한 요약 설명입니다.
@@ -1108,11 +1108,11 @@ namespace PnPeople.Security
                 byte[] bValue = Encoding.Default.GetBytes(sValue);
                 byte[] enc = Encrypt(bValue);
                 if (enc == null) return CODE.CTR_FATAL_ERROR;
-                sReturn = CryptUtil.GetHexFromByte(enc);
+                sReturn = Convert.ToBase64String(enc);
             }
             else
             {
-                byte[] bValue = CryptUtil.GetHexArray(sValue);
+                byte[] bValue = Convert.FromBase64String(sValue);
                 byte[] dec = Decrypt(bValue);
                 if (dec == null) return CODE.CTR_FATAL_ERROR;
                 sReturn = Encoding.Default.GetString(dec);

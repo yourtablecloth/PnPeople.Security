@@ -69,7 +69,7 @@ namespace PnPeople.Security.Test
 
                     Console.Write("- Type private key password: ");
 
-                    CustomPKCS12 p12 = new CustomPKCS12();
+                    SHASEEDDecryptor p12 = new SHASEEDDecryptor();
                     var passwd = ReadPasswordFromConsole();
                     var decrypted = p12.Decrypt(encInfo.Algorithm, encInfo.Salt, encInfo.IterationCount, encInfo.EncryptedData, passwd);
 
