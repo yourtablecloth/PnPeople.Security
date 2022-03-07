@@ -1,7 +1,7 @@
+using Mono.Security.X509;
 using System;
 using System.Security.Cryptography;
 using System.Text;
-using Mono.Security.X509;
 
 // https://thermidor.tistory.com/431
 
@@ -97,6 +97,8 @@ namespace PnPeople.Security
                                                                    //byte[] result1 = seed1.Decrypt(encryptedData);
             SEED seed = GetSymmetricAlgorithm(salt, iterationCount);
             byte[] result = seed.Decrypt(encryptedData);
+            if (result == null)
+                return null;
             // CFB 테스트
             seed.ModType = SEED.MODE.AI_CFB;
             byte[] enc = seed.Encrypt(result /*result2*/);

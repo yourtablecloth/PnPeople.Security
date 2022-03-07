@@ -14,55 +14,65 @@ namespace PnPeople.Security.Test
         {
             string folder = Path.Combine(
                 Environment.GetEnvironmentVariable("USERPROFILE"),
-                "AppData", "LocalLow", "NPKI", "yessign");
+                "AppData", "LocalLow", "NPKI");
 
             // 실제 개인 인증서 접근 부분
-            foreach (var eachDirectory in Directory.GetDirectories(Path.Combine(folder, "USER")))
+            foreach (var eachProviderDirectory in Directory.GetDirectories(folder))
             {
-                Console.WriteLine($"{Path.GetFileName(eachDirectory)}");
-                var certFile = Directory.GetFiles(eachDirectory, "*.der", SearchOption.TopDirectoryOnly).FirstOrDefault();
+                Console.WriteLine($"[{Path.GetFileName(eachProviderDirectory)}]");
 
-                if (certFile != null && File.Exists(certFile))
+                foreach (var eachDirectory in Directory.GetDirectories(Path.Combine(eachProviderDirectory, "USER")))
                 {
-                    X509Certificate cert = X509Certificate.CreateFromCertFile(certFile);
-                    X509Certificate2 token = new X509Certificate2(cert);
+                    Console.WriteLine($"{Path.GetFileName(eachDirectory)}");
+                    var certFile = Directory.GetFiles(eachDirectory, "*.der", SearchOption.TopDirectoryOnly).FirstOrDefault();
 
-                    Console.WriteLine("- IssuerName: " + token.Issuer);
-                    Console.WriteLine("- KeyAlgorithm: " + token.GetKeyAlgorithm());
-                    Console.WriteLine("- KeyAlgorithmParameters: " + token.GetKeyAlgorithmParametersString());
-                    Console.WriteLine("- Name: " + token.Subject);
-                    Console.WriteLine("- PublicKey: " + token.GetPublicKeyString());
-                    Console.WriteLine("- SerialNumber: " + token.GetSerialNumberString());
-                }
+                    if (certFile != null && File.Exists(certFile))
+                    {
+                        X509Certificate cert = X509Certificate.CreateFromCertFile(certFile);
+                        X509Certificate2 token = new X509Certificate2(cert);
 
-                var keyFile = Directory.GetFiles(eachDirectory, "*.key", SearchOption.TopDirectoryOnly).FirstOrDefault();
+                        Console.WriteLine("- IssuerName: " + token.Issuer);
+                        Console.WriteLine("- KeyAlgorithm: " + token.GetKeyAlgorithm());
+                        Console.WriteLine("- KeyAlgorithmParameters: " + token.GetKeyAlgorithmParametersString());
+                        Console.WriteLine("- Name: " + token.Subject);
+                        Console.WriteLine("- PublicKey: " + token.GetPublicKeyString());
+                        Console.WriteLine("- SerialNumber: " + token.GetSerialNumberString());
+                    }
 
-                if (keyFile == null || !File.Exists(keyFile))
-                    continue;
+                    var keyFile = Directory.GetFiles(eachDirectory, "*.key", SearchOption.TopDirectoryOnly).FirstOrDefault();
 
-                byte[] bytes = File.ReadAllBytes(keyFile);
-                Console.WriteLine("- KeyType: " + PKCS8.GetType(bytes));
+                    if (keyFile == null || !File.Exists(keyFile))
+                        continue;
 
-                PKCS8.EncryptedPrivateKeyInfo encInfo = new PKCS8.EncryptedPrivateKeyInfo(bytes);
-                Console.WriteLine("- Algorithm: " + encInfo.Algorithm);
+                    byte[] bytes = File.ReadAllBytes(keyFile);
+                    Console.WriteLine("- KeyType: " + PKCS8.GetType(bytes));
 
-                Console.Write("- Type private key password: ");
+                    PKCS8.EncryptedPrivateKeyInfo encInfo = new PKCS8.EncryptedPrivateKeyInfo(bytes);
+                    Console.WriteLine("- Algorithm: " + encInfo.Algorithm);
 
-                nPKCS12 p12 = new nPKCS12();
-                p12.Password = ReadPasswordFromConsole(); // 실제 개인키 암호
-                byte[] decrypted = p12.Decrypt(encInfo.Algorithm, encInfo.Salt, encInfo.IterationCount, encInfo.EncryptedData);
+                    Console.Write("- Type private key password: ");
 
-                if (decrypted != null)
-                {
-                    PKCS8.PrivateKeyInfo keyInfo = new PKCS8.PrivateKeyInfo(decrypted);
-                    RSA provider = PKCS8.PrivateKeyInfo.DecodeRSA(keyInfo.PrivateKey);
+                    nPKCS12 p12 = new nPKCS12();
+                    p12.Password = ReadPasswordFromConsole(); // 실제 개인키 암호
+                    byte[] decrypted = p12.Decrypt(encInfo.Algorithm, encInfo.Salt, encInfo.IterationCount, encInfo.EncryptedData);
 
-                    // 개인키를 이용한 전자서명 테스트
-                    byte[] buffer = Encoding.Default.GetBytes("1234567890");
-                    byte[] signed = provider.SignData(buffer, HashAlgorithmName.SHA1, RSASignaturePadding.Pkcs1);
-                    var result = provider.VerifyData(buffer, signed, HashAlgorithmName.SHA1, RSASignaturePadding.Pkcs1);
+                    if (decrypted != null)
+                    {
+                        PKCS8.PrivateKeyInfo keyInfo = new PKCS8.PrivateKeyInfo(decrypted);
+                        RSA provider = PKCS8.PrivateKeyInfo.DecodeRSA(keyInfo.PrivateKey);
 
-                    Console.WriteLine($"- Signature Validation Result: {(result ? "Valid" : "Invalid")}");
+                        // 개인키를 이용한 전자서명 테스트
+                        var randomString = string.Concat(Enumerable.Range(1, (int)(Math.Abs(DateTime.Now.Ticks) % 9)).Select(x => Guid.NewGuid().ToString("n")));
+                        byte[] buffer = Encoding.Default.GetBytes(randomString);
+                        byte[] signed = provider.SignData(buffer, HashAlgorithmName.SHA1, RSASignaturePadding.Pkcs1);
+                        var result = provider.VerifyData(buffer, signed, HashAlgorithmName.SHA1, RSASignaturePadding.Pkcs1);
+
+                        Console.WriteLine($"- Signature Validation Result: {(result ? "Valid" : "Invalid")}");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"- Cannot decrypt private key");
+                    }
                 }
             }
         }
