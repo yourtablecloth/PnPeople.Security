@@ -2,6 +2,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Security;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
@@ -67,6 +68,12 @@ namespace PnPeople.Security.Test
                     var encInfo = new PKCS8.EncryptedPrivateKeyInfo(bytes);
                     Console.WriteLine("- Algorithm: " + encInfo.Algorithm);
 
+                    if (!string.Equals(encInfo.Algorithm, SHASEEDDecryptor.pbeWithSHAAndSEEDCBC, StringComparison.Ordinal))
+                    {
+                        Console.WriteLine("- Unsupported algorithm found.");
+                        continue;
+                    }
+
                     Console.Write("- Type private key password: ");
 
                     SHASEEDDecryptor p12 = new SHASEEDDecryptor();
@@ -89,19 +96,59 @@ namespace PnPeople.Security.Test
                         if (result && token != null)
                         {
                             var tokenWithPrivateKey = token.CopyWithPrivateKey(provider);
-                            var pfxData = tokenWithPrivateKey.Export(X509ContentType.Pfx, passwd);
                             var directoryPath = Path.GetDirectoryName(certFile);
-                            var pfxPath = Path.Combine(directoryPath, "signCert.pfx");
+
+                            var pfxData = tokenWithPrivateKey.Export(X509ContentType.Pfx, passwd);
+                            var pfxPath = Path.Combine(directoryPath, "signCertNew.pfx");
                             File.WriteAllBytes(pfxPath, pfxData);
 
                             if (File.Exists(pfxPath))
                                 Console.WriteLine($"- PFX Converted: {pfxPath}");
+
+                            // PFX를 다시 DER/KEY로 분리 (단, SEED 암호화는 사용하지 않음)
+                            tokenWithPrivateKey = new X509Certificate2(File.ReadAllBytes(pfxPath), passwd, X509KeyStorageFlags.Exportable);
+
+                            var certData = tokenWithPrivateKey.Export(X509ContentType.Cert);
+                            var certPath = Path.Combine(directoryPath, "signCertNew.der");
+                            File.WriteAllBytes(certPath, certData);
+
+                            if (File.Exists(certPath))
+                                Console.WriteLine($"- Certificate converted: {certPath}");
+
+                            /* TODO: encInfo.IterationCount 값을 PFX에서 가져와야 함. */
+                            var keyData = tokenWithPrivateKey.PrivateKey.ExportEncryptedPkcs8PrivateKey(
+                                UnprotectSecureString(passwd),
+                                new PbeParameters(PbeEncryptionAlgorithm.TripleDes3KeyPkcs12, HashAlgorithmName.SHA1, 2048));
+
+                            var keyPath = Path.Combine(directoryPath, "signPriNew.key");
+                            File.WriteAllBytes(keyPath, keyData);
+
+                            if (File.Exists(keyPath))
+                                Console.WriteLine($"- Private key converted: {keyPath}");
                         }
                     }
                     else
                     {
                         Console.WriteLine($"- Cannot decrypt private key");
                     }
+                }
+            }
+        }
+
+        private static char[] UnprotectSecureString(SecureString s)
+        {
+            var ptr = IntPtr.Zero;
+
+            try
+            {
+                ptr = Marshal.SecureStringToBSTR(s);
+                return Marshal.PtrToStringBSTR(ptr).ToCharArray();
+            }
+            finally
+            {
+                if (ptr != IntPtr.Zero)
+                {
+                    Marshal.ZeroFreeBSTR(ptr);
                 }
             }
         }
