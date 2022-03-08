@@ -14,6 +14,16 @@ namespace PnPeople.Security.Test
     {
         private static void Main()
         {
+            var compatibleAlgs = new string[]
+            {
+                Mono.Security.X509.PKCS12.pbeWithSHAAnd128BitRC4,
+                Mono.Security.X509.PKCS12.pbeWithSHAAnd40BitRC4,
+                Mono.Security.X509.PKCS12.pbeWithSHAAnd3KeyTripleDESCBC,
+                Mono.Security.X509.PKCS12.pbeWithSHAAnd2KeyTripleDESCBC,
+                Mono.Security.X509.PKCS12.pbeWithSHAAnd128BitRC2CBC,
+                Mono.Security.X509.PKCS12.pbeWithSHAAnd40BitRC2CBC
+            };
+
             var folder = Path.Combine(
                 Environment.GetEnvironmentVariable("USERPROFILE"),
                 "AppData", "LocalLow", "NPKI");
@@ -68,17 +78,26 @@ namespace PnPeople.Security.Test
                     var encInfo = new PKCS8.EncryptedPrivateKeyInfo(bytes);
                     Console.WriteLine("- Algorithm: " + encInfo.Algorithm);
 
-                    if (!string.Equals(encInfo.Algorithm, SHASEEDDecryptor.pbeWithSHAAndSEEDCBC, StringComparison.Ordinal))
+                    Console.Write("- Type private key password: ");
+                    var passwd = ReadPasswordFromConsole();
+
+                    byte[] decrypted = null;
+                    if (string.Equals(encInfo.Algorithm, SHASEEDDecryptor.pbeWithSHAAndSEEDCBC, StringComparison.Ordinal))
+                    {
+                        SHASEEDDecryptor p12 = new SHASEEDDecryptor();
+                        decrypted = p12.Decrypt(encInfo.Algorithm, encInfo.Salt, encInfo.IterationCount, encInfo.EncryptedData, passwd);
+                    }
+                    else if (compatibleAlgs.Contains(encInfo.Algorithm, StringComparer.Ordinal))
+                    {
+                        var p12 = new Mono.Security.X509.PKCS12();
+                        p12.Password = new string(UnprotectSecureString(passwd));
+                        decrypted = p12.Decrypt(encInfo.Algorithm, encInfo.Salt, encInfo.IterationCount, encInfo.EncryptedData);
+                    }
+                    else
                     {
                         Console.WriteLine("- Unsupported algorithm found.");
                         continue;
                     }
-
-                    Console.Write("- Type private key password: ");
-
-                    SHASEEDDecryptor p12 = new SHASEEDDecryptor();
-                    var passwd = ReadPasswordFromConsole();
-                    var decrypted = p12.Decrypt(encInfo.Algorithm, encInfo.Salt, encInfo.IterationCount, encInfo.EncryptedData, passwd);
 
                     if (decrypted != null)
                     {
