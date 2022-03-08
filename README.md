@@ -1,5 +1,7 @@
 # PnPeople.Security
 
+[NuGet Package](https://www.nuget.org/packages/PnPeople.Security/)
+
 SEED Cryptography Algorithm Library for .NET Standard 2.0+
 
 ## How to use
