@@ -16,7 +16,7 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <EnableNETAnalyzers>False</EnableNETAnalyzers>
     <EnforceCodeStyleInBuild>False</EnforceCodeStyleInBuild>
-    <!-- <DefineConstants>INSIDE_CORLIB</DefineConstants> -->
+    <DefineConstants>INSIDE_CORLIB</DefineConstants>
   </PropertyGroup>
 
 </Project>

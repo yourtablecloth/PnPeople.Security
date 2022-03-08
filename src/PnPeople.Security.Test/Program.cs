@@ -1,8 +1,6 @@
-﻿using Mono.Security.Cryptography;
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Security;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
@@ -14,16 +12,6 @@ namespace PnPeople.Security.Test
     {
         private static void Main()
         {
-            var compatibleAlgs = new string[]
-            {
-                Mono.Security.X509.PKCS12.pbeWithSHAAnd128BitRC4,
-                Mono.Security.X509.PKCS12.pbeWithSHAAnd40BitRC4,
-                Mono.Security.X509.PKCS12.pbeWithSHAAnd3KeyTripleDESCBC,
-                Mono.Security.X509.PKCS12.pbeWithSHAAnd2KeyTripleDESCBC,
-                Mono.Security.X509.PKCS12.pbeWithSHAAnd128BitRC2CBC,
-                Mono.Security.X509.PKCS12.pbeWithSHAAnd40BitRC2CBC
-            };
-
             var folder = Path.Combine(
                 Environment.GetEnvironmentVariable("USERPROFILE"),
                 "AppData", "LocalLow", "NPKI");
@@ -38,13 +26,11 @@ namespace PnPeople.Security.Test
                     Console.WriteLine($"{Path.GetFileName(eachDirectory)}");
                     var certFile = Directory.GetFiles(eachDirectory, "*.der", SearchOption.TopDirectoryOnly).FirstOrDefault();
 
-                    X509Certificate cert = null;
                     X509Certificate2 token = null;
 
                     if (certFile != null && File.Exists(certFile))
                     {
-                        cert = X509Certificate.CreateFromCertFile(certFile);
-                        token = new X509Certificate2(cert);
+                        token = new X509Certificate2(X509Certificate.CreateFromCertFile(certFile));
 
                         Console.WriteLine("- IssuerName: " + token.Issuer);
                         Console.WriteLine("- KeyAlgorithm: " + token.GetKeyAlgorithm());
@@ -73,37 +59,26 @@ namespace PnPeople.Security.Test
                         continue;
 
                     var bytes = File.ReadAllBytes(keyFile);
-                    Console.WriteLine("- KeyType: " + PKCS8.GetType(bytes));
-
-                    var encInfo = new PKCS8.EncryptedPrivateKeyInfo(bytes);
-                    Console.WriteLine("- Algorithm: " + encInfo.Algorithm);
+                    var privKeyInfo = CertPrivateKeyHelper.GetPrivateKeyInfo(bytes);
+                    Console.WriteLine("- KeyType: " + privKeyInfo.KeyType);
+                    Console.WriteLine("- Algorithm: " + privKeyInfo.Algorithm);
 
                     Console.Write("- Type private key password: ");
                     var passwd = ReadPasswordFromConsole();
 
-                    byte[] decrypted = null;
-                    if (string.Equals(encInfo.Algorithm, SHASEEDDecryptor.pbeWithSHAAndSEEDCBC, StringComparison.Ordinal))
-                    {
-                        SHASEEDDecryptor p12 = new SHASEEDDecryptor();
-                        decrypted = p12.Decrypt(encInfo.Algorithm, encInfo.Salt, encInfo.IterationCount, encInfo.EncryptedData, passwd);
-                    }
-                    else if (compatibleAlgs.Contains(encInfo.Algorithm, StringComparer.Ordinal))
-                    {
-                        var p12 = new Mono.Security.X509.PKCS12();
-                        p12.Password = new string(UnprotectSecureString(passwd));
-                        decrypted = p12.Decrypt(encInfo.Algorithm, encInfo.Salt, encInfo.IterationCount, encInfo.EncryptedData);
-                    }
-                    else
+                    var copiedPassword = CertPrivateKeyHelper.CopyFromSecureString(passwd);
+                    var decryptor = CertPrivateKeyHelper.GetPrivateKeyDecryptor(privKeyInfo);
+
+                    if (decryptor == null)
                     {
                         Console.WriteLine("- Unsupported algorithm found.");
                         continue;
                     }
 
-                    if (decrypted != null)
-                    {
-                        var keyInfo = new PKCS8.PrivateKeyInfo(decrypted);
-                        var provider = PKCS8.PrivateKeyInfo.DecodeRSA(keyInfo.PrivateKey);
+                    var provider = decryptor.Invoke(privKeyInfo, copiedPassword);
 
+                    if (provider != null)
+                    {
                         // 개인키를 이용한 전자서명 테스트
                         var randomString = string.Concat(Enumerable.Range(1, (int)(Math.Abs(DateTime.Now.Ticks) % 9)).Select(x => Guid.NewGuid().ToString("n")));
                         var buffer = Encoding.Default.GetBytes(randomString);
@@ -137,7 +112,7 @@ namespace PnPeople.Security.Test
                             // https://www.rootca.or.kr/kcac/down/Guide/Implementation_Guideline_for_Safe_Usage_of_Accredited_Certificate_using_bio_information_in_Smart_phone.pdf
                             // 위 문서의 '2.2 공인인증서 전자서명생성정보 저장 방안' 내용에 따르면 IterationCount는 2048로 약속된 것 같다.
                             var keyData = tokenWithPrivateKey.PrivateKey.ExportEncryptedPkcs8PrivateKey(
-                                UnprotectSecureString(passwd),
+                                copiedPassword,
                                 new PbeParameters(PbeEncryptionAlgorithm.TripleDes3KeyPkcs12, HashAlgorithmName.SHA1, 2048));
 
                             var keyPath = Path.Combine(directoryPath, "signPriNew.key");
@@ -151,24 +126,6 @@ namespace PnPeople.Security.Test
                     {
                         Console.WriteLine($"- Cannot decrypt private key");
                     }
-                }
-            }
-        }
-
-        private static char[] UnprotectSecureString(SecureString s)
-        {
-            var ptr = IntPtr.Zero;
-
-            try
-            {
-                ptr = Marshal.SecureStringToBSTR(s);
-                return Marshal.PtrToStringBSTR(ptr).ToCharArray();
-            }
-            finally
-            {
-                if (ptr != IntPtr.Zero)
-                {
-                    Marshal.ZeroFreeBSTR(ptr);
                 }
             }
         }

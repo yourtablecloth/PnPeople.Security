@@ -18,30 +18,6 @@ namespace PnPeople.Security
         {
         }
 
-        // https://stackoverflow.com/questions/818704/how-to-convert-securestring-to-system-string
-        private char[] ConvertToCharArray(SecureString value)
-        {
-            var valuePtr = IntPtr.Zero;
-
-            try
-            {
-                valuePtr = Marshal.SecureStringToGlobalAllocUnicode(value);
-                var recoveredArray = new char[value.Length];
-
-                for (int i = 0; i < value.Length; i++)
-                {
-                    short unicodeChar = Marshal.ReadInt16(valuePtr, i * 2);
-                    recoveredArray[i] = (char)unicodeChar;
-                }
-
-                return recoveredArray;
-            }
-            finally
-            {
-                Marshal.ZeroFreeGlobalAllocUnicode(valuePtr);
-            }
-        }
-
         private SEED GetSymmetricAlgorithm(byte[] salt, int iterationCount, byte[] password)
         {
             PasswordDeriveBytes pdb = new PasswordDeriveBytes(password, salt, "SHA1", iterationCount); // PBKDF1
@@ -73,24 +49,39 @@ namespace PnPeople.Security
 
         public byte[] Decrypt(string algorithmOid, byte[] salt, int iterationCount, byte[] encryptedData, SecureString protectedPassword)
         {
+            char[] copiedPassword = null;
+
+            try
+            {
+                copiedPassword = CertPrivateKeyHelper.CopyFromSecureString(protectedPassword);
+                return Decrypt(algorithmOid, salt, iterationCount, encryptedData, copiedPassword);
+            }
+            finally
+            {
+                if (copiedPassword != null)
+                {
+                    for (var i = 0; i < copiedPassword.Length; i++)
+                        copiedPassword[i] = '\0';
+                }
+            }
+        }
+
+        public byte[] Decrypt(string algorithmOid, byte[] salt, int iterationCount, byte[] encryptedData, char[] rawPassword)
+        {
             // Only for SHA1/SEED/CBC
             if (algorithmOid != pbeWithSHAAndSEEDCBC)
                 return null;
 
             byte[] password = null;
-            var recoveredArray = ConvertToCharArray(protectedPassword);
 
-            if (recoveredArray.Length > 0)
+            if (rawPassword.Length > 0)
             {
-                int size = protectedPassword.Length;
+                int size = rawPassword.Length;
                 if (size > PKCS12.MaximumPasswordLength)
                     size = PKCS12.MaximumPasswordLength;
                 password = new byte[size];
-                Encoding.Default.GetBytes(recoveredArray, 0, size, password, 0);
+                Encoding.Default.GetBytes(rawPassword, 0, size, password, 0);
             }
-            
-            for (int i = 0; i < recoveredArray.Length; i++)
-                recoveredArray[i] = '\0';
 
             SEED seed = GetSymmetricAlgorithm(salt, iterationCount, password);
             byte[] result = seed.Decrypt(encryptedData);
@@ -113,19 +104,6 @@ namespace PnPeople.Security
             seed.Decrypt(enc);
 
             return result;
-        }
-
-        [Obsolete("Please use SecureString version of this method.", false)]
-        public byte[] Decrypt(string algorithmOid, byte[] salt, int iterationCount, byte[] encryptedData, char[] unprotectedPassword)
-        {
-            if (unprotectedPassword == null)
-                return null;
-
-            var protectedPassword = new SecureString();
-            for (var i = 0; i < unprotectedPassword.Length; i++)
-                protectedPassword.AppendChar(unprotectedPassword[i]);
-
-            return Decrypt(algorithmOid, salt, iterationCount, encryptedData, protectedPassword);
         }
     }
 }
