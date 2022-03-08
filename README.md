@@ -8,13 +8,16 @@ SEED Cryptography Algorithm Library for .NET Standard 2.0+
 
 You can use this library to convert your SEED encrypted private key into a .NET standard RSA instance.
 
-1. First read the .der file and the .key file respectively into a byte array.
+1. First read the `.der` file and the `.key` file respectively into a byte array.
 1. Create an instance of the `System.Security.Cryptography.X509Certificates.X509Certificate2` class to read the public key data.
-1. Create an instance of the `Mono.Security.Cryptography.PKCS8.EncryptedPrivateKeyInfo` class to read the private key data.
-1. Create an instance of the `PnPeople.Security.SHASEEDDecryptor` class.
+1. Call the `GetPrivateKeyInfo` function of the `PnPeople.Security.CertPrivateKeyHelper` class to read the private key data.
 1. Prepare the certificate password by inputting it from the user.
-1. When calling the `Decrypt` function of the SHASEEDDecryptor class, pass the secret key's algorithm, Salt, count of iterations, encrypted data, and certificate password.
-1. Call the `DecodeRSA` function of the `Mono.Security.PKCS8.PrivateKeyInfo` class to change the decrypted secret key to a standard RSA provider instance in .NET.
+1. Call the `GetPrivateKeyDecryptor` function of the `PnPeople.Security.CertPrivateKeyHelper` class to obtain exact private key decryptor.
+1. When calling the decryptor delegate function, pass the private key information data and certificate password. The decryptor will return a standard RSA provider instance in .NET.
+
+Now you can use the RSA provider instance to sign the data.
+
+## Sample Code
 
 Here is the sample application code.
 
@@ -23,7 +26,6 @@ var folder = Path.Combine(
     Environment.GetEnvironmentVariable("USERPROFILE"),
     "AppData", "LocalLow", "NPKI");
 
-// 실제 개인 인증서 접근 부분
 foreach (var eachProviderDirectory in Directory.GetDirectories(folder))
 {
     Console.WriteLine($"[{Path.GetFileName(eachProviderDirectory)}]");
