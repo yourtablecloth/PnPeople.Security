@@ -1,5 +1,7 @@
 # PnPeople.Security
 
+[NuGet Package](https://www.nuget.org/packages/PnPeople.Security/)
+
 SEED Cryptography Algorithm Library for .NET Standard 2.0+
 
 ## How to use
@@ -30,7 +32,6 @@ var folder = Path.Combine(
     Environment.GetEnvironmentVariable("USERPROFILE"),
     "AppData", "LocalLow", "NPKI");
 
-// 실제 개인 인증서 접근 부분
 foreach (var eachProviderDirectory in Directory.GetDirectories(folder))
 {
     Console.WriteLine($"[{Path.GetFileName(eachProviderDirectory)}]");
@@ -91,7 +92,6 @@ foreach (var eachProviderDirectory in Directory.GetDirectories(folder))
             var keyInfo = new PKCS8.PrivateKeyInfo(decrypted);
             var provider = PKCS8.PrivateKeyInfo.DecodeRSA(keyInfo.PrivateKey);
 
-            // 개인키를 이용한 전자서명 테스트
             var randomString = string.Concat(Enumerable.Range(1, (int)(Math.Abs(DateTime.Now.Ticks) % 9)).Select(x => Guid.NewGuid().ToString("n")));
             var buffer = Encoding.Default.GetBytes(randomString);
             var signed = provider.SignData(buffer, HashAlgorithmName.SHA1, RSASignaturePadding.Pkcs1);
