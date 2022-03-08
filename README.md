@@ -88,7 +88,6 @@ foreach (var eachProviderDirectory in Directory.GetDirectories(folder))
 
         if (provider != null)
         {
-            // 개인키를 이용한 전자서명 테스트
             var randomString = string.Concat(Enumerable.Range(1, (int)(Math.Abs(DateTime.Now.Ticks) % 9)).Select(x => Guid.NewGuid().ToString("n")));
             var buffer = Encoding.Default.GetBytes(randomString);
             var signed = provider.SignData(buffer, HashAlgorithmName.SHA1, RSASignaturePadding.Pkcs1);
@@ -108,7 +107,7 @@ foreach (var eachProviderDirectory in Directory.GetDirectories(folder))
                 if (File.Exists(pfxPath))
                     Console.WriteLine($"- PFX Converted: {pfxPath}");
 
-                // PFX를 다시 DER/KEY로 분리 (단, SEED 암호화는 사용하지 않음)
+                // Separate PFX back into DER/KEY (but don't use SEED encryption)
                 tokenWithPrivateKey = new X509Certificate2(File.ReadAllBytes(pfxPath), passwd, X509KeyStorageFlags.Exportable);
 
                 var certData = tokenWithPrivateKey.Export(X509ContentType.Cert);
@@ -119,7 +118,7 @@ foreach (var eachProviderDirectory in Directory.GetDirectories(folder))
                     Console.WriteLine($"- Certificate converted: {certPath}");
 
                 // https://www.rootca.or.kr/kcac/down/Guide/Implementation_Guideline_for_Safe_Usage_of_Accredited_Certificate_using_bio_information_in_Smart_phone.pdf
-                // 위 문서의 '2.2 공인인증서 전자서명생성정보 저장 방안' 내용에 따르면 IterationCount는 2048로 약속된 것 같다.
+                // According to the contents of '2.2 Authenticated Certificate Digital Signature Creation Information Storage Plan' of the above document, IterationCount seems to be promised to 2048.
                 var keyData = tokenWithPrivateKey.PrivateKey.ExportEncryptedPkcs8PrivateKey(
                     copiedPassword,
                     new PbeParameters(PbeEncryptionAlgorithm.TripleDes3KeyPkcs12, HashAlgorithmName.SHA1, 2048));
