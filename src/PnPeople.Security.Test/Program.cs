@@ -111,7 +111,7 @@ namespace PnPeople.Security.Test
 
                             // https://www.rootca.or.kr/kcac/down/Guide/Implementation_Guideline_for_Safe_Usage_of_Accredited_Certificate_using_bio_information_in_Smart_phone.pdf
                             // 위 문서의 '2.2 공인인증서 전자서명생성정보 저장 방안' 내용에 따르면 IterationCount는 2048로 약속된 것 같다.
-                            var keyData = tokenWithPrivateKey.PrivateKey.ExportEncryptedPkcs8PrivateKey(
+                            var keyData = tokenWithPrivateKey.GetRSAPrivateKey().ExportEncryptedPkcs8PrivateKey(
                                 copiedPassword,
                                 new PbeParameters(PbeEncryptionAlgorithm.TripleDes3KeyPkcs12, HashAlgorithmName.SHA1, 2048));
 
